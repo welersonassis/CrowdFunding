@@ -13,12 +13,14 @@ contract CrowdFunding {
     error CrowdFunding__CampaingIsNotSuccessful();
     error CrowdFunding__RefundsNotAvaiable();
     error CrowdFunding__NoContributionsToRefund();
+    error CrowdFunding__ContractIsPaused();
 
     string public name;
     string public description;
     uint256 public goal;
     uint256 public deadline;
     address public owner;
+    bool public paused;
 
     enum campaignState {
         Active,
@@ -55,7 +57,15 @@ contract CrowdFunding {
         _;
     }
 
+    modifier notPaused() {
+        if (paused) {
+            revert CrowdFunding__ContractIsPaused();
+        }
+        _;
+    }
+
     constructor(
+        address _owner,
         string memory _name,
         string memory _description,
         uint256 _goal,
@@ -65,7 +75,7 @@ contract CrowdFunding {
         description = _description;
         goal = _goal;
         deadline = block.timestamp + (_durationInDays * 1 days);
-        owner = msg.sender;
+        owner = _owner;
         state = campaignState.Active;
     }
 
@@ -83,7 +93,7 @@ contract CrowdFunding {
         }
     }
 
-    function fund(uint256 _tierIndex) public payable campaignOpen {
+    function fund(uint256 _tierIndex) public payable campaignOpen notPaused {
         if (_tierIndex >= tiers.length) {
             revert CrowdFunding__TierDoesNotExist();
         }
@@ -160,5 +170,27 @@ contract CrowdFunding {
 
     function getContractBalance() public view returns (uint256) {
         return address(this).balance;
+    }
+
+    function getTiers() public view returns (Tier[] memory) {
+        return tiers;
+    }
+
+    function togglePause() public onlyOwner {
+        paused = !paused;
+    }
+
+    function getCampaingStatus() public view returns (campaignState) {
+        if (state == campaignState.Active && block.timestamp >= deadline) {
+            return
+                address(this).balance >= goal
+                    ? campaignState.Succeeded
+                    : campaignState.Failed;
+        }
+        return state;
+    }
+
+    function extendedDeadline(uint256 _days) public onlyOwner {
+        deadline += _days * 1 days;
     }
 }
